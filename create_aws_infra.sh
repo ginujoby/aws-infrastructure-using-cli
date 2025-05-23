@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Create VPC
 vpc_id=$(aws ec2 create-vpc \
     --cidr-block 10.0.0.0/25 \
@@ -102,4 +104,60 @@ aws ec2 associate-route-table --subnet-id $private_subnet_id --route-table-id $p
 echo "Private Route Table created and associated."
 
 
+# Amazon Machine Image ID
+ami_id=ami-0ec1ab28d37d960a9
 
+# Find my IP
+myIp=$(curl -s https://checkip.amazonaws.com)
+
+# Create Security Group for Bastion Host
+bastion_sg_id=$(aws ec2 create-security-group \
+    --group-name "Bastion Security Group" \
+    --description "Allow SSH" \
+    --vpc-id $vpc_id \
+    --query 'GroupId' \
+    --output text)
+
+echo "Security Group created: $bastion_sg_id"
+
+# Adding Ingress Rule. Allow SSH only from my IP
+aws ec2 authorize-security-group-ingress \
+    --group-id $bastion_sg_id \
+    --protocol tcp \
+    --port 22 \
+    --cidr $myIp/32
+
+# Launch Bastion Host EC2
+aws ec2 run-instances \
+    --image-id $ami_id \
+    --instance-type t3.micro \
+    --subnet-id $public_subnet_id \
+    --key-name vockey \
+    --associate-public-ip-address \
+    --security-group-ids $bastion_sg_id \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value="Bastion Server"}]'
+
+
+# Create Security Group for Private Instance
+private_sg_id=$(aws ec2 create-security-group \
+    --group-name "Private Security Group" \
+    --description "Allow SSH only from Bastion" \
+    --vpc-id $vpc_id \
+    --query 'GroupId' \
+    --output text)
+
+# Adding Ingress Rule. Allow SSH only from Bastion/CIDR 
+aws ec2 authorize-security-group-ingress \
+    --group-id $private_sg_id \
+    --protocol tcp \
+    --port 22 \
+    --cidr 10.0.0.0/28
+
+# Launch Private Instance
+aws ec2 run-instances \
+    --image-id $ami_id \
+    --instance-type t3.micro \
+    --subnet-id $private_subnet_id \
+    --key-name vockey \
+    --security-group-ids $private_sg_id \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value="Private Server"}]'
