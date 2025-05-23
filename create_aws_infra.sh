@@ -43,7 +43,7 @@ aws ec2 attach-internet-gateway \
     --internet-gateway-id $igw_id \
     --vpc-id $vpc_id
 
-echo "Internet Gateway attached: $igw_id"
+echo "Internet Gateway attached"
 
 # Create Public Route Table
 public_rtb_id=$(aws ec2 create-route-table \
@@ -118,7 +118,7 @@ bastion_sg_id=$(aws ec2 create-security-group \
     --query 'GroupId' \
     --output text)
 
-echo "Security Group created: $bastion_sg_id"
+echo "Bastion Security Group created: $bastion_sg_id"
 
 # Adding Ingress Rule. Allow SSH only from my IP
 aws ec2 authorize-security-group-ingress \
@@ -128,14 +128,18 @@ aws ec2 authorize-security-group-ingress \
     --cidr $myIp/32
 
 # Launch Bastion Host EC2
-aws ec2 run-instances \
+bastion_server_instance_id=$(aws ec2 run-instances \
     --image-id $ami_id \
     --instance-type t3.micro \
     --subnet-id $public_subnet_id \
     --key-name vockey \
     --associate-public-ip-address \
     --security-group-ids $bastion_sg_id \
-    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value="Bastion Server"}]'
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value="Bastion Server"}]' \
+    --query 'Instances[0].InstanceId' \
+    --output text)
+
+echo "Bastion Server created: $bastion_server_instance_id"
 
 
 # Create Security Group for Private Instance
@@ -146,6 +150,8 @@ private_sg_id=$(aws ec2 create-security-group \
     --query 'GroupId' \
     --output text)
 
+echo "Private Security Group created: $private_sg_id"
+
 # Adding Ingress Rule. Allow SSH only from Bastion/CIDR 
 aws ec2 authorize-security-group-ingress \
     --group-id $private_sg_id \
@@ -154,10 +160,14 @@ aws ec2 authorize-security-group-ingress \
     --cidr 10.0.0.0/28
 
 # Launch Private Instance
-aws ec2 run-instances \
+private_server_instance_id=$(aws ec2 run-instances \
     --image-id $ami_id \
     --instance-type t3.micro \
     --subnet-id $private_subnet_id \
     --key-name vockey \
     --security-group-ids $private_sg_id \
-    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value="Private Server"}]'
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value="Private Server"}]' \
+    --query 'Instances[0].InstanceId' \
+    --output text)
+
+echo "Private Server created: $private_server_instance_id"
